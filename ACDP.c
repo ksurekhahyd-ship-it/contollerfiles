@@ -20,7 +20,8 @@ _Bool FAULT_PIN @ PB_ODR : 1;
 #define RS485_START_BYTE 0x0A
 #define RS485_RX_PAYLOAD_LENGTH 8
 #define RS485_TX_PAYLOAD_LENGTH 49
-#define RS485_TX_TIMEOUT 65535
+#define RS485_TX_CHECKSUM_INDEX 50
+#define RS485_TX_TIMEOUT 2000
 
 _Bool RS485_ENABLE @ PC_ODR     : 7; 
 _Bool EMPTY        @ USART1_SR  : 7;
@@ -2702,9 +2703,6 @@ void disp_para(void)
 	
 void Communication(void)
 {
-	unsigned char t;
-
-
 	 if(flag10==1)   // 5msec TO 45msec flag10=1
    {
 		   if(rdata[0]==0X03)
@@ -2713,12 +2711,6 @@ void Communication(void)
 			   data11=rdata[1];
 		   }
        flag10=0;
-
-
-       for(t=0;(t<RS485_RX_PAYLOAD_LENGTH);t++)
-       rdata[t]=0;
-
-
     }
             
     if(flag11==1)
@@ -2858,7 +2850,7 @@ void Communication(void)
 			*/
 		
 			
-       sdata[50]=RS485_CalculateChecksum(&sdata[1],RS485_TX_PAYLOAD_LENGTH);
+       sdata[RS485_TX_CHECKSUM_INDEX]=RS485_CalculateChecksum(&sdata[1],RS485_TX_PAYLOAD_LENGTH);
        TX_enable=1;
 
 
