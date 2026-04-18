@@ -17,7 +17,7 @@ _Bool START_CONV @ ADC1_CR1 : 1;
 _Bool FAULT_PIN @ PB_ODR : 1;
 
 #define NO_BYETES_HDP 50
-#define RS485_START_BYTE 0X0A
+#define RS485_START_BYTE 0x0A
 #define RS485_RX_PAYLOAD_LENGTH 8
 #define RS485_TX_PAYLOAD_LENGTH 49
 #define RS485_TX_TIMEOUT 65535
@@ -1481,47 +1481,66 @@ bool RS485_ValidateFrame(unsigned char *data, unsigned char length, unsigned cha
 	return (RS485_CalculateChecksum(data,length)==received_checksum);
 }
 
-void RS485_MasterTransmit(unsigned char *data, unsigned char length)
+bool RS485_WaitForEmpty(void)
 {
-	unsigned char i, checksum_local;
 	unsigned int timeout_cnt;
-
-	RS485_ENABLE=1;
 
 	timeout_cnt=RS485_TX_TIMEOUT;
 	while((!EMPTY)&&(timeout_cnt!=0))
 	timeout_cnt--;
-	if(timeout_cnt==0)
-	goto tx_abort;
+
+	return (timeout_cnt!=0);
+}
+
+void RS485_MasterTransmit(unsigned char *data, unsigned char length)
+{
+	unsigned char i, checksum_local;
+
+	RS485_ENABLE=1;
+
+	if(!RS485_WaitForEmpty())
+	{
+		RS485_ENABLE=0;
+		RX_enable=1;
+		TX_enable=0;
+		return;
+	}
 
 	USART1_DR=RS485_START_BYTE;
 
 	for(i=0;i<length;i++)
 	{
-		timeout_cnt=RS485_TX_TIMEOUT;
-		while((!EMPTY)&&(timeout_cnt!=0))
-		timeout_cnt--;
-		if(timeout_cnt==0)
-		goto tx_abort;
+		if(!RS485_WaitForEmpty())
+		{
+			RS485_ENABLE=0;
+			RX_enable=1;
+			TX_enable=0;
+			return;
+		}
 
 		USART1_DR=data[i];
 	}
 
 	checksum_local=RS485_CalculateChecksum(data,length);
 
-	timeout_cnt=RS485_TX_TIMEOUT;
-	while((!EMPTY)&&(timeout_cnt!=0))
-	timeout_cnt--;
-	if(timeout_cnt==0)
-	goto tx_abort;
+	if(!RS485_WaitForEmpty())
+	{
+		RS485_ENABLE=0;
+		RX_enable=1;
+		TX_enable=0;
+		return;
+	}
 
 	USART1_DR=checksum_local;
 
-	timeout_cnt=RS485_TX_TIMEOUT;
-	while((!EMPTY)&&(timeout_cnt!=0))
-	timeout_cnt--;
+	if(!RS485_WaitForEmpty())
+	{
+		RS485_ENABLE=0;
+		RX_enable=1;
+		TX_enable=0;
+		return;
+	}
 
-tx_abort:
 	delay(3);
 
 	RS485_ENABLE=0;
@@ -1531,7 +1550,7 @@ tx_abort:
 
 void RS485_SlaveReceive(void)
 {
-	static volatile unsigned char frame_started=0;
+	static unsigned char frame_started=0;
 	unsigned char received_checksum;
 
 	if((PE!=0)||(FE!=0)||(NF!=0)||(OR!=0))
@@ -1566,27 +1585,27 @@ void RS485_SlaveReceive(void)
 		return;
 	}
 
-	if(c_rx_counter1>RS485_RX_PAYLOAD_LENGTH)
+	if(c_rx_counter1==RS485_RX_PAYLOAD_LENGTH)
 	{
+		received_checksum=(unsigned char)data1;
+
+		if(RS485_ValidateFrame(rdata,RS485_RX_PAYLOAD_LENGTH,received_checksum))
+		{
+			flag10=1;
+		}
+		else
+		{
+			flag10=0;
+		}
+
 		frame_started=0;
 		c_rx_counter1=0;
-		flag10=0;
 		return;
-	}
-
-	received_checksum=(unsigned char)data1;
-
-	if(RS485_ValidateFrame(rdata,RS485_RX_PAYLOAD_LENGTH,received_checksum))
-	{
-		flag10=1;
-	}
-	else
-	{
-		flag10=0;
 	}
 
 	frame_started=0;
 	c_rx_counter1=0;
+	flag10=0;
 }
 
 @far @interrupt void usart_tx(void)
