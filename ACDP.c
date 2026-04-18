@@ -2715,7 +2715,7 @@ void Communication(void)
        flag10=0;
 
 
-       for(t=0;(t<=RS485_RX_PAYLOAD_LENGTH);t++)
+       for(t=0;(t<RS485_RX_PAYLOAD_LENGTH);t++)
        rdata[t]=0;
 
 
