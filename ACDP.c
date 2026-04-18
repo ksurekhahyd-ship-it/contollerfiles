@@ -1550,10 +1550,10 @@ void RS485_MasterTransmit(unsigned char *data, unsigned char length)
 
 void RS485_SlaveReceive(void)
 {
-	static unsigned char frame_started=0;
+	static volatile unsigned char frame_started=0;
 	unsigned char received_checksum;
 
-	if((PE!=0)||(FE!=0)||(NF!=0)||(OR!=0))
+	if(PE||FE||NF||OR)
 	{
 		data1=USART1_DR;
 		frame_started=0;
@@ -1569,7 +1569,7 @@ void RS485_SlaveReceive(void)
 
 	if(frame_started==0)
 	{
-		if(((unsigned char)data1)==RS485_START_BYTE)
+		if((unsigned char)data1==RS485_START_BYTE)
 		{
 			frame_started=1;
 			c_rx_counter1=0;
