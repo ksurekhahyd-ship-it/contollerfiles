@@ -1451,80 +1451,131 @@ void delay(unsigned int D)
 
 
 void timer_sec(void)
-{ 
+{
    TIM4_IER=0X01;
 	 TIM4_EGR=0X01;
 	 TIM4_ARR=250;      // Every 1ms Timer4 overflow Interrupt
 	 TIM4_PSCR=0x06;	  //
-	 TIM4_CNTR=0X00;   
+	 TIM4_CNTR=0X00;
 	 TIM4_CR1=0X81;  //auto reload,counter enable
 }
 
-@far @interrupt void usart_tx(void)
-{	
- 	 if((txdata & 0X100)==0X100)    
-   {  
-     c_tx_counter1=1;	 
-		 flag12=1;	
-	 } 
-	 
-  	  txdata=0;
-		  txdata=sdata[c_tx_counter1];
-		  USART1_DR=txdata;
-		 
-		  c_tx_counter1++;
-		  if(c_tx_counter1>51)
-		  {c_tx_counter1=0; TX_enable=0;}	 //TX_enable=0;
+unsigned char RS485_CalculateChecksum(unsigned char *data, unsigned char length)
+{
+	unsigned char i, checksum_local=0;
 
-  delay(3);
-		
+	for(i=0;i<length;i++)
+	{
+		checksum_local^=data[i];
+	}
+
+	return checksum_local;
+}
+
+bool RS485_ValidateFrame(unsigned char *data, unsigned char length, unsigned char received_checksum)
+{
+	return (RS485_CalculateChecksum(data,length)==received_checksum);
+}
+
+void RS485_MasterTransmit(unsigned char *data, unsigned char length)
+{
+	unsigned char i, checksum_local;
+
+	RS485_ENABLE=1;
+
+	while(!EMPTY);
+	USART1_DR=0X0A;
+
+	for(i=0;i<length;i++)
+	{
+		while(!EMPTY);
+		USART1_DR=data[i];
+	}
+
+	checksum_local=RS485_CalculateChecksum(data,length);
+
+	while(!EMPTY);
+	USART1_DR=checksum_local;
+
+	while(!EMPTY);
+	delay(3);
+
+	RS485_ENABLE=0;
+	RX_enable=1;
+	TX_enable=0;
+}
+
+void RS485_SlaveReceive(void)
+{
+	static unsigned char frame_started=0;
+	unsigned char received_checksum;
+
+	if((PE!=0)||(FE!=0)||(NF!=0)||(OR!=0))
+	{
+		data1=USART1_DR;
+		frame_started=0;
+		c_rx_counter1=0;
+		flag10=0;
+		return;
+	}
+
+	if(RXNE!=1)
+	return;
+
+	data1=USART1_DR;
+
+	if(frame_started==0)
+	{
+		if(((unsigned char)data1)==0X0A)
+		{
+			frame_started=1;
+			c_rx_counter1=0;
+		}
+
+		return;
+	}
+
+	if(c_rx_counter1<8)
+	{
+		rdata[c_rx_counter1]=(unsigned char)data1;
+		c_rx_counter1++;
+		return;
+	}
+
+	received_checksum=(unsigned char)data1;
+
+	if(RS485_ValidateFrame(rdata,8,received_checksum))
+	{
+		flag10=1;
+	}
+	else
+	{
+		flag10=0;
+	}
+
+	frame_started=0;
+	c_rx_counter1=0;
+}
+
+@far @interrupt void usart_tx(void)
+{
+	if(flag11==1)
+	{
+		RS485_MasterTransmit(&sdata[1],49);
+		flag11=0;
+	}
+
 	USART1_SR=0;
-	 
+
 	return;
 }
 
 @far @interrupt void usart_rx(void)
 {
- /*
-  
-	  if(RXNE==1)
-	  {
-	    data1=USART1_DR;
-	 
-	 
-      rdata[c_rx_counter1]=data1; 
-      rdata1[c_rx_counter1]=data1; 			
-      ++c_rx_counter1;
-			 
-      if(c_rx_counter1>8)    //8              
-      {cou1=50;c_rx_counter1=0;} 
-  
+	RS485_SlaveReceive();
 
-		  data11=rdata[3];
-	  }*/	
-		
-		
-	 if((PE==0)||(FE==0)||(NF==0)||(OR==0)&&(RXNE==1)&&(c_rx_counter1==0))	
-   {
-	   computer=0X00;
-   }
-	  data1=USART1_DR;
-	 
-	  if(computer==0X00)                                         
-    {
-      rdata[c_rx_counter1-1]=data1;
-		//	rdata1[c_rx_counter1-1]=data1;
-			
-      ++c_rx_counter1;       
-			 
-      if(c_rx_counter1>9)       //NO_BYETES_HDP           
-      {cou1=80;}       
-    }     
-	 
-	//  data11=rdata[3];
 	USART1_SR=0;
-	            
-	 
+
 	return;
 }
 
@@ -2599,26 +2650,23 @@ void disp_para(void)
 	
 void Communication(void)
 {
-	unsigned char t,nb; 
- 
-	
+	unsigned char t;
+
+
 	 if(flag10==1)   // 5msec TO 45msec flag10=1
    {
-		   
-       checksum=0;
-       for(t=1;t<8;t++)
-       checksum+=rdata[t];    
-                            
-       if(((0xff^checksum)==rdata[8])&&(rdata[0]==0X03))
-		   { flag11=1; data11=rdata[1];}           
-       else
-       {flag10=0;}
-			 
-			
+		   if(rdata[0]==0X03)
+		   {
+			   flag11=1;
+			   data11=rdata[1];
+		   }
+       flag10=0;
+
+
        for(t=0;(t<=8);t++)
-       rdata[t]=0;    
-			 
-			 
+       rdata[t]=0;
+
+
     }
             
     if(flag11==1)
@@ -2758,29 +2806,11 @@ void Communication(void)
 			*/
 		
 			
-       for(nb=1;(nb<50);nb++) 
-       {
-         sdata[50]+=sdata[nb];                
-       }        
-               
-       sdata[50]^=0xff;
-                                      
-       RS485_ENABLE=1;     //rs 485 enable 
+       sdata[50]=RS485_CalculateChecksum(&sdata[1],49);
        TX_enable=1;
- 
-       ijk:
-       if(EMPTY!=1)
-       goto ijk;    
-                    
-       txdata=0;
-       txdata|=0x100;
-       txdata+=sdata[0];
-       USART1_DR=txdata;   
-                   
-       flag11=0;
-		
-            
-    }	 
+
+
+    }
 		//data11=100;
   }	
 
