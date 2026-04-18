@@ -20,7 +20,6 @@ _Bool FAULT_PIN @ PB_ODR : 1;
 #define RS485_START_BYTE 0x0A
 #define RS485_RX_PAYLOAD_LENGTH 8
 #define RS485_TX_PAYLOAD_LENGTH 49
-#define RS485_TX_CHECKSUM_INDEX 50
 #define RS485_TX_TIMEOUT 2000
 
 _Bool RS485_ENABLE @ PC_ODR     : 7; 
@@ -2850,7 +2849,6 @@ void Communication(void)
 			*/
 		
 			
-       sdata[RS485_TX_CHECKSUM_INDEX]=RS485_CalculateChecksum(&sdata[1],RS485_TX_PAYLOAD_LENGTH);
        TX_enable=1;
 
 
