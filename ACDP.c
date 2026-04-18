@@ -1551,7 +1551,7 @@ void RS485_MasterTransmit(unsigned char *data, unsigned char length)
 void RS485_SlaveReceive(void)
 {
 	static volatile unsigned char frame_started=0;
-	unsigned char received_checksum;
+	unsigned char rx_byte, received_checksum;
 
 	if(PE||FE||NF||OR)
 	{
@@ -1566,10 +1566,11 @@ void RS485_SlaveReceive(void)
 	return;
 
 	data1=USART1_DR;
+	rx_byte=(unsigned char)data1;
 
 	if(frame_started==0)
 	{
-		if((unsigned char)data1==RS485_START_BYTE)
+		if(rx_byte==RS485_START_BYTE)
 		{
 			frame_started=1;
 			c_rx_counter1=0;
@@ -1580,14 +1581,14 @@ void RS485_SlaveReceive(void)
 
 	if(c_rx_counter1<RS485_RX_PAYLOAD_LENGTH)
 	{
-		rdata[c_rx_counter1]=(unsigned char)data1;
+		rdata[c_rx_counter1]=rx_byte;
 		c_rx_counter1++;
 		return;
 	}
 
 	if(c_rx_counter1==RS485_RX_PAYLOAD_LENGTH)
 	{
-		received_checksum=(unsigned char)data1;
+		received_checksum=rx_byte;
 
 		if(RS485_ValidateFrame(rdata,RS485_RX_PAYLOAD_LENGTH,received_checksum))
 		{
@@ -2714,7 +2715,7 @@ void Communication(void)
        flag10=0;
 
 
-       for(t=0;(t<=8);t++)
+       for(t=0;(t<=RS485_RX_PAYLOAD_LENGTH);t++)
        rdata[t]=0;
 
 
